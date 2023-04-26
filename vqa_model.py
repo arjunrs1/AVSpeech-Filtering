@@ -104,27 +104,24 @@ def main():
     processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
     model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
 
-    index = 0
 
     # iterate over batches
     for imgs, img_paths, questions in vqa_dataloader:
-        if index == 0:
-            encoding = processor (imgs, questions, return_tensors="pt", padding="max_length")
-            outputs = model(**encoding)
+        encoding = processor (imgs, questions, return_tensors="pt", padding="max_length")
+        outputs = model(**encoding)
 
-            logits = outputs.logits
-            ans = logits.argmax(1)
+        logits = outputs.logits
+        ans = logits.argmax(1)
 
-            # softmax = Softmax(dim=1)
-            # softmax_vals = softmax(logits)
-            # softmax_scores = softmax_vals[range(len(logits)), ans]
+        # softmax = Softmax(dim=1)
+        # softmax_vals = softmax(logits)
+        # softmax_scores = softmax_vals[range(len(logits)), ans]
 
-            sigmoid = Sigmoid()
-            sigmoid_vals = sigmoid(logits)
-            sigmoid_scores = sigmoid_vals[range(len(logits)), ans]
+        sigmoid = Sigmoid()
+        sigmoid_vals = sigmoid(logits)
+        sigmoid_scores = sigmoid_vals[range(len(logits)), ans]
 
-            update_df(vqa_data, np.array(img_paths), np.array(questions), ans, sigmoid_scores)
-            index = 1
+        update_df(vqa_data, np.array(img_paths), np.array(questions), ans, sigmoid_scores)
 
     vqa_data.df.index = range(len(vqa_data.images))
     vqa_data.df.to_csv("output.csv")
