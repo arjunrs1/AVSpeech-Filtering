@@ -1,0 +1,15 @@
+Is a microphone or headset visible in the image?
+
+Is there a whiteboard/blackboard in the background?
+
+Is the entire background one solid color and material?
+
+Is there a large projector screen covering most of the background?
+
+Is part or all of the background virtual?
+
+Are there multiple screens in the image?
+
+Are the floor and wall both visible?
+
+Is the wider room clearly visible?
