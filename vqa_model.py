@@ -32,7 +32,7 @@ class ImageTextQuery(Dataset):
                     questions.append(line.rstrip())
         
 
-        self.df = init_df(images, len(questions))
+        self.df = init_df()
         self.folder = folder_dir
         self.questions = np.array(questions)
         self.images = np.array(images)
@@ -57,19 +57,10 @@ class ImageTextQuery(Dataset):
 
         return image, img_name, question
 
-
-# intitalized df columns [image_filename, answer_0, confidence_score_0, answer_1, ...]
 # question strings are not in df, but are indexed starting zero in the order from the text file
-def init_df(images, num_questions):
-    cols = ["image_filename"]
-
-    for i in range(num_questions):
-        cols.append(f"answer_{i}")
-        cols.append(f"confidence_score_{i}")
+def init_df():
+    cols = ["image_filename", "question", "answer", "confidence_score"]
     df = pd.DataFrame(columns=cols)
-
-    df["image_filename"] = images
-    df.index = images
     return df
 
 # updates image row in df for a qiven question, adds the answer and corresponding accuracy
@@ -79,12 +70,11 @@ def update_df(data, img, question, answer, accuracy):
     sorter = np.argsort(data.questions)
     idx = sorter[np.searchsorted(data.questions, question, sorter=sorter)]
     
-    col_name_ans = [f"answer_{i}" for i in idx]
-    col_name_score = [f"confidence_score_{i}" for i in idx]
-
-    for i in range(len(img)):
-        data.df.loc[img[i], col_name_ans[i]] = convert_to_label(answer[i].item())
-        data.df.loc[img[i], col_name_score[i]] = round(accuracy[i].item(), 3)
+    # append df with new question image pairs from this batch
+    temp = pd.DataFrame({"image_filename":img, "question":idx, 
+                        "answer":np.vectorize(convert_to_label)(answer.detach().numpy()), 
+                        "confidence_score":accuracy.detach().numpy()})
+    data.df = pd.concat([data.df, temp])
 
 # since we only care about yes and no values, we don't need full id2label dictionary
 def convert_to_label(num):
@@ -104,7 +94,6 @@ def main():
     processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
     model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
 
-
     # iterate over batches
     for imgs, img_paths, questions in vqa_dataloader:
         encoding = processor (imgs, questions, return_tensors="pt", padding="max_length")
@@ -123,7 +112,9 @@ def main():
 
         update_df(vqa_data, np.array(img_paths), np.array(questions), ans, sigmoid_scores)
 
-    vqa_data.df.index = range(len(vqa_data.images))
+    vqa_data.df = vqa_data.df.pivot(index='image_filename', columns='question', values=['answer', 'confidence_score'])
+    # df columns  = [image_filename, answer_0, confidence_score_0, answer_1, ...]
+    vqa_data.df.columns = [f"answer_{i}" for i in range(len(vqa_data.questions))] + [f"confidence_score_{i}" for i in range(len(vqa_data.questions))] 
     vqa_data.df.to_csv("output.csv")
 
 
