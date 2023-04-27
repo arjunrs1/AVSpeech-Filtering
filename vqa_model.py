@@ -8,6 +8,7 @@ from torchvision import io
 from transformers import ViltProcessor, ViltForQuestionAnswering
 from pathlib import Path
 from numpy import unravel_index
+import tqdm
 
 # img_folder_path: folder path for images
 # questions_file: txt file with questions on separate line
@@ -87,35 +88,37 @@ def convert_to_label(num):
 
 def main():
     # dataset and loader
-    vqa_data = ImageTextQuery("./img_subset/", "questions.txt")
+    vqa_data = ImageTextQuery("/vision/vision_data/sound-spaces/data/vam/data/acoustic_avspeech/img_subset/", "questions.txt")
     vqa_dataloader = DataLoader(vqa_data, batch_size=64)
 
     # processor and model 
     processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-    model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+    model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa").to("cuda")
+    model.eval()
 
     # iterate over batches
-    for imgs, img_paths, questions in vqa_dataloader:
-        encoding = processor (imgs, questions, return_tensors="pt", padding="max_length")
-        outputs = model(**encoding)
+    with torch.no_grad():
+        for imgs, img_paths, questions in tqdm.tqdm(vqa_dataloader):
+            encoding = processor (imgs, questions, return_tensors="pt", padding="max_length").to("cuda")
+            outputs = model(**encoding)
 
-        logits = outputs.logits
-        ans = logits.argmax(1)
+            logits = outputs.logits
+            ans = logits.argmax(1)
 
-        # softmax = Softmax(dim=1)
-        # softmax_vals = softmax(logits)
-        # softmax_scores = softmax_vals[range(len(logits)), ans]
+            # softmax = Softmax(dim=1)
+            # softmax_vals = softmax(logits)
+            # softmax_scores = softmax_vals[range(len(logits)), ans]
 
-        sigmoid = Sigmoid()
-        sigmoid_vals = sigmoid(logits)
-        sigmoid_scores = sigmoid_vals[range(len(logits)), ans]
+            sigmoid = Sigmoid()
+            sigmoid_vals = sigmoid(logits)
+            sigmoid_scores = sigmoid_vals[range(len(logits)), ans]
 
-        update_df(vqa_data, np.array(img_paths), np.array(questions), ans, sigmoid_scores)
+            update_df(vqa_data, np.array(img_paths), np.array(questions), ans.detach().cpu(), sigmoid_scores.detach().cpu())
 
     vqa_data.df = vqa_data.df.pivot(index='image_filename', columns='question', values=['answer', 'confidence_score'])
     # df columns  = [image_filename, answer_0, confidence_score_0, answer_1, ...]
     vqa_data.df.columns = [f"answer_{i}" for i in range(len(vqa_data.questions))] + [f"confidence_score_{i}" for i in range(len(vqa_data.questions))] 
-    vqa_data.df.to_csv("output.csv")
+    vqa_data.df.to_csv("./output.csv")
 
 
 if __name__ == "__main__":
